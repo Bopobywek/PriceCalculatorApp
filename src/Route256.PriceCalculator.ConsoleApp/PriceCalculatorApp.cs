@@ -112,6 +112,7 @@ public class PriceCalculatorApp
 
         var _ = await streamReader.ReadLineAsync();
 
+        var lineIndex = 0;
         while (!streamReader.EndOfStream)
         {
             var line = await streamReader.ReadLineAsync();
@@ -120,7 +121,7 @@ public class PriceCalculatorApp
 
             if (tokens == null)
             {
-                throw new FormatException("");
+                throw new FormatException($"The input file line {lineIndex + 1} cannot be parsed");
             }
 
             var model = new GoodModel(
@@ -132,6 +133,8 @@ public class PriceCalculatorApp
 
             Interlocked.Increment(ref _numberOfLinesRead);
             await outputChannel.Writer.WriteAsync(model);
+
+            ++lineIndex;
         }
 
         outputChannel.Writer.Complete();

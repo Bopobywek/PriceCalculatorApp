@@ -15,7 +15,7 @@ internal static class Program
         
         IConfiguration configuration = new ConfigurationBuilder()
             .SetBasePath(context.GetProjectDirectory())
-            .AddJsonFile("appsettings.json", optional: false)
+            .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
             .Build();
 
         var serviceCollection = new ServiceCollection();
