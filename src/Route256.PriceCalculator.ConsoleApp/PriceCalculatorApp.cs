@@ -2,13 +2,12 @@
 using System.Threading.Channels;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Route256.PriceCalculator.ConsoleApp.Interfaces;
+using Route256.PriceCalculator.ConsoleApp.Models;
+using Route256.PriceCalculator.ConsoleApp.Options;
 using Route256.PriceCalculator.Domain.Services.Interfaces;
-using Route256.Wee4.Homework.PriceCalculatorConsoleApp.Interfaces;
-using Route256.Wee4.Homework.PriceCalculatorConsoleApp.Models;
-using Route256.Wee4.Homework.PriceCalculatorConsoleApp.Options;
-using Domain = Route256.PriceCalculator.Domain.Models;
 
-namespace Route256.Wee4.Homework.PriceCalculatorConsoleApp;
+namespace Route256.PriceCalculator.ConsoleApp;
 
 public class PriceCalculatorApp
 {
@@ -146,7 +145,7 @@ public class PriceCalculatorApp
         cancellationToken.ThrowIfCancellationRequested();
         await foreach (var model in inputChannel.Reader.ReadAllAsync(cancellationToken))
         {
-            var calculatorModel = new Domain.PriceCalculator.GoodModel(
+            var calculatorModel = new Domain.Models.PriceCalculator.GoodModel(
                 Height: model.Height,
                 Length: model.Length,
                 Width: model.Width,

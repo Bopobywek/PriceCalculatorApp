@@ -1,4 +1,4 @@
-﻿namespace Route256.Wee4.Homework.PriceCalculatorConsoleApp.Models;
+﻿namespace Route256.PriceCalculator.ConsoleApp.Models;
 
 public record GoodModel(
     long Id,

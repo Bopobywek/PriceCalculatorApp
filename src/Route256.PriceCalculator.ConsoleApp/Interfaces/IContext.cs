@@ -1,4 +1,4 @@
-﻿namespace Route256.Wee4.Homework.PriceCalculatorConsoleApp.Interfaces;
+﻿namespace Route256.PriceCalculator.ConsoleApp.Interfaces;
 
 public interface IContext
 {

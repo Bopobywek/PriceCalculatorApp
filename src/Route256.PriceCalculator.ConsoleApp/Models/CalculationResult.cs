@@ -1,3 +1,3 @@
-﻿namespace Route256.Wee4.Homework.PriceCalculatorConsoleApp.Models;
+﻿namespace Route256.PriceCalculator.ConsoleApp.Models;
 
 public record CalculationResult(long Id, decimal DeliveryPrice);

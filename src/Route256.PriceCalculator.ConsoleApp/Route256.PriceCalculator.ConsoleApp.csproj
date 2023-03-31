@@ -5,8 +5,6 @@
         <TargetFramework>net6.0</TargetFramework>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
-        <AssemblyName>Route256.Wee4.Homework.PriceCalculatorConsoleApp</AssemblyName>
-        <RootNamespace>Route256.Wee4.Homework.PriceCalculatorConsoleApp</RootNamespace>
     </PropertyGroup>
 
     <ItemGroup>

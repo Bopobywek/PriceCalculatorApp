@@ -1,6 +1,6 @@
-﻿using Route256.Wee4.Homework.PriceCalculatorConsoleApp.Interfaces;
+﻿using Route256.PriceCalculator.ConsoleApp.Interfaces;
 
-namespace Route256.Wee4.Homework.PriceCalculatorConsoleApp;
+namespace Route256.PriceCalculator.ConsoleApp;
 
 public class Context : IContext
 {

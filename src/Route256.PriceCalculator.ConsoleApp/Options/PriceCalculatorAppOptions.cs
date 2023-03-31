@@ -1,4 +1,4 @@
-﻿namespace Route256.Wee4.Homework.PriceCalculatorConsoleApp.Options;
+﻿namespace Route256.PriceCalculator.ConsoleApp.Options;
 
 public sealed class PriceCalculatorAppOptions
 {

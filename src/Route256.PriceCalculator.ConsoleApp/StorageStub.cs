@@ -2,7 +2,7 @@
 using Route256.PriceCalculator.Domain.Entities;
 using Route256.PriceCalculator.Domain.Separated;
 
-namespace Route256.Wee4.Homework.PriceCalculatorConsoleApp;
+namespace Route256.PriceCalculator.ConsoleApp;
 
 public class StorageStub : IStorageRepository
 {

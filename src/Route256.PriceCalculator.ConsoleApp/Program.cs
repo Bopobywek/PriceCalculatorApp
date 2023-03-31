@@ -1,11 +1,11 @@
 ﻿using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Route256.PriceCalculator.ConsoleApp.Interfaces;
+using Route256.PriceCalculator.ConsoleApp.Options;
 using Route256.PriceCalculator.Domain;
 using Route256.PriceCalculator.Domain.Separated;
-using Route256.Wee4.Homework.PriceCalculatorConsoleApp.Interfaces;
-using Route256.Wee4.Homework.PriceCalculatorConsoleApp.Options;
 
-namespace Route256.Wee4.Homework.PriceCalculatorConsoleApp;
+namespace Route256.PriceCalculator.ConsoleApp;
 
 internal static class Program
 {
