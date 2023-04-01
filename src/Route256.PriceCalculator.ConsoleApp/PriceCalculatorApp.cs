@@ -26,15 +26,14 @@ public class PriceCalculatorApp
     private bool _isProcessorsFinishRead;
 
     public PriceCalculatorApp(IOptionsMonitor<PriceCalculatorAppOptions> optionsMonitor,
-        IPriceCalculatorService priceCalculatorService, IContext context)
+        IPriceCalculatorService priceCalculatorService, ILogger<PriceCalculatorApp> logger, IContext context)
     {
         _priceCalculatorService = priceCalculatorService;
         _context = context;
-        using var loggerFactory = LoggerFactory.Create(builder => builder.AddConsole());
-        _logger = loggerFactory.CreateLogger<PriceCalculatorApp>();
+        _logger = logger;
         _options = optionsMonitor.CurrentValue;
 
-        optionsMonitor.OnChange(opt => { ChangeNumberOfProcessors(opt.ParallelismDegree); });
+        optionsMonitor.OnChange(options => { ChangeNumberOfProcessors(options.ParallelismDegree); });
 
         _readerChannel = Channel.CreateBounded<GoodModel>(new BoundedChannelOptions(_options.ReaderChannelBound)
         {
@@ -55,16 +54,15 @@ public class PriceCalculatorApp
 
         RunProcessors(_options.ParallelismDegree, _readerChannel, _writerChannel);
 
-        var taskReadData = ReadData(
+        var readDataTask = ReadData(
             Path.Combine(_context.GetProjectDirectory(), "data", "input.csv"),
             _readerChannel);
-        var taskWriteData = WriteData(
+        var writeDataTask = WriteData(
             Path.Combine(_context.GetProjectDirectory(), "data", "output.csv"),
             _writerChannel);
 
-        await taskReadData;
+        await readDataTask;
 
-        // Чтение заверешно задачами обработки
         await _readerChannel.Reader.Completion;
         
         // Чтобы не получилось такой ситуации, что при Task.WhenAll список задач изменяется,
@@ -77,7 +75,7 @@ public class PriceCalculatorApp
         await Task.WhenAll(_tasks);
 
         _writerChannel.Writer.Complete();
-        await taskWriteData;
+        await writeDataTask;
 
         _isCompleted = true;
         await logTask;
@@ -94,17 +92,17 @@ public class PriceCalculatorApp
 
             if (newCount > _tasks.Count)
             {
-                int delta = newCount - _tasks.Count;
+                var delta = newCount - _tasks.Count;
                 RunProcessors(delta, _readerChannel, _writerChannel);
             }
             else if (newCount < _tasks.Count)
             {
-                int delta = _tasks.Count - newCount;
+                var delta = _tasks.Count - newCount;
                 for (var i = 0; i < delta; ++i)
                 {
                     var task = _tasks.Dequeue();
                     _cancellationTokenSources[task].Cancel();
-                    _logger.Log(LogLevel.Debug, "Task{number} canceled", i + 1);
+                    _logger.Log(LogLevel.Debug, "Task{number} canceled", _tasks.Count + 1);
                 }
             }
         }
@@ -120,7 +118,7 @@ public class PriceCalculatorApp
             var task = ProcessData(readerChannel, writerChannel, cancellationToken);
             _tasks.Enqueue(task);
             _cancellationTokenSources[task] = tokenSource;
-            _logger.Log(LogLevel.Debug, "Task{number} created and started", i + 1);
+            _logger.Log(LogLevel.Debug, "Task{number} created and started", _tasks.Count);
         }
     }
 
