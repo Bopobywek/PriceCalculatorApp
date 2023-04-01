@@ -24,12 +24,11 @@ public class PriceCalculatorApp
     private bool _isCompleted;
 
     public PriceCalculatorApp(IOptionsMonitor<PriceCalculatorAppOptions> optionsMonitor,
-        IPriceCalculatorService priceCalculatorService, IContext context)
+        IPriceCalculatorService priceCalculatorService, ILogger<PriceCalculatorApp> logger, IContext context)
     {
         _priceCalculatorService = priceCalculatorService;
         _context = context;
-        using var loggerFactory = LoggerFactory.Create(builder => builder.AddConsole());
-        _logger = loggerFactory.CreateLogger<PriceCalculatorApp>();
+        _logger = logger;
         _options = optionsMonitor.CurrentValue;
 
         _readerChannel = Channel.CreateBounded<GoodModel>(new BoundedChannelOptions(_options.ReaderChannelBound)

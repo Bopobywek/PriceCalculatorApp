@@ -1,5 +1,6 @@
 ﻿using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Route256.PriceCalculator.ConsoleApp.Interfaces;
 using Route256.PriceCalculator.ConsoleApp.Options;
 using Route256.PriceCalculator.Domain;
@@ -25,7 +26,7 @@ internal static class Program
             .AddTransient<IContext, Context>()
             .Configure<PriceCalculatorAppOptions>(configuration.GetSection("PriceCalculatorAppOptions"))
             .Configure<PriceCalculatorOptions>(configuration.GetSection("PriceCalculatorOptions"))
-            .AddLogging()
+            .AddLogging(builder => builder.AddConfiguration(configuration.GetSection("Logging")).AddConsole())
             .AddDomain();
         
         var serviceProvider = serviceCollection.BuildServiceProvider();
