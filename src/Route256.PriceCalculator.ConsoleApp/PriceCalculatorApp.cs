@@ -1,11 +1,9 @@
-﻿using System.Globalization;
-using System.Threading.Channels;
+﻿using System.Threading.Channels;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Route256.PriceCalculator.ConsoleApp.Interfaces;
 using Route256.PriceCalculator.ConsoleApp.Models;
 using Route256.PriceCalculator.ConsoleApp.Options;
-using Route256.PriceCalculator.Domain.Services.Interfaces;
 
 namespace Route256.PriceCalculator.ConsoleApp;
 
