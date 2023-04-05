@@ -1,9 +1,11 @@
-﻿using Microsoft.Extensions.Configuration;
+﻿using System.Threading.Channels;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Route256.PriceCalculator.ConsoleApp.Interfaces;
 using Route256.PriceCalculator.ConsoleApp.Options;
 using Route256.PriceCalculator.Domain;
+using Route256.PriceCalculator.Domain.Models.PriceCalculator;
 using Route256.PriceCalculator.Domain.Separated;
 
 namespace Route256.PriceCalculator.ConsoleApp;
@@ -21,6 +23,9 @@ internal static class Program
 
         var serviceCollection = new ServiceCollection();
         serviceCollection
+            .AddTransient<IDataReader, Reader>()
+            .AddTransient<IDataWriter, Writer>()
+            .AddTransient<IDataProcessor, Processor>()
             .AddTransient<PriceCalculatorApp>()
             .AddTransient<IStorageRepository, StorageStub>()
             .AddTransient<IContext, Context>()
