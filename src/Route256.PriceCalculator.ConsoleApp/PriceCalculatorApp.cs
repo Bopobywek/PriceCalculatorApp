@@ -11,29 +11,25 @@ namespace Route256.PriceCalculator.ConsoleApp;
 
 public class PriceCalculatorApp
 {
-    private readonly IPriceCalculatorService _priceCalculatorService;
-    private readonly IContext _context;
     private readonly ILogger<PriceCalculatorApp> _logger;
+    private readonly IDataReader _reader;
+    private readonly IDataProcessor _processor;
+    private readonly IDataWriter _writer;
     private readonly PriceCalculatorAppOptions _options;
-    private readonly Dictionary<Task, CancellationTokenSource> _cancellationTokenSources = new();
     private readonly Queue<Task> _tasks = new();
+    private bool _isCompleted;
     private readonly Channel<GoodModel> _readerChannel;
     private readonly Channel<CalculationResult> _writerChannel;
-    private int _numberOfLinesRead;
-    private int _numberOfCalculations;
-    private int _numberOfLinesWrite;
-    private bool _isCompleted;
-    private bool _isProcessorsFinishRead;
 
     public PriceCalculatorApp(IOptionsMonitor<PriceCalculatorAppOptions> optionsMonitor,
-        IPriceCalculatorService priceCalculatorService, ILogger<PriceCalculatorApp> logger, IContext context)
-    {
-        _priceCalculatorService = priceCalculatorService;
-        _context = context;
-        _logger = logger;
-        _options = optionsMonitor.CurrentValue;
+        ILogger<PriceCalculatorApp> logger, IDataReader reader, IDataProcessor processor, IDataWriter writer)
 
-        optionsMonitor.OnChange(options => { ChangeNumberOfProcessors(options.ParallelismDegree); });
+    {
+        _logger = logger;
+        _reader = reader;
+        _processor = processor;
+        _writer = writer;
+        _options = optionsMonitor.CurrentValue;
 
         _readerChannel = Channel.CreateBounded<GoodModel>(new BoundedChannelOptions(_options.ReaderChannelBound)
         {
@@ -50,75 +46,34 @@ public class PriceCalculatorApp
 
     public async Task Run()
     {
+        var tokenSource = new CancellationTokenSource();
+        var cancellationToken = tokenSource.Token;
+
         var logTask = ReportProgress();
 
-        RunProcessors(_options.ParallelismDegree, _readerChannel, _writerChannel);
+        RunProcessors(_readerChannel, _writerChannel, cancellationToken);
 
-        var readDataTask = ReadData(
-            Path.Combine(_context.GetProjectDirectory(), "data", "input.csv"),
-            _readerChannel);
-        var writeDataTask = WriteData(
-            Path.Combine(_context.GetProjectDirectory(), "data", "output.csv"),
-            _writerChannel);
+        var taskReadData = _reader.ReadData(_readerChannel);
+        var taskWriteData = _writer.WriteData(_writerChannel);
 
-        await readDataTask;
-
-        await _readerChannel.Reader.Completion;
-        
-        // Чтобы не получилось такой ситуации, что при Task.WhenAll список задач изменяется,
-        // ставим флаг.
-        lock (_tasks)
-        {
-            _isProcessorsFinishRead = true;
-        }
-
+        await taskReadData;
         await Task.WhenAll(_tasks);
 
         _writerChannel.Writer.Complete();
-        await writeDataTask;
+        await taskWriteData;
 
         _isCompleted = true;
         await logTask;
     }
 
-    private void ChangeNumberOfProcessors(int newCount)
+    private void RunProcessors(Channel<GoodModel> readerChannel, Channel<CalculationResult> writerChannel,
+        CancellationToken cancellationToken)
     {
-        lock (_tasks)
+        for (var i = 0; i < _options.ParallelismDegree; ++i)
         {
-            if (_isProcessorsFinishRead)
-            {
-                return;
-            }
-
-            if (newCount > _tasks.Count)
-            {
-                var delta = newCount - _tasks.Count;
-                RunProcessors(delta, _readerChannel, _writerChannel);
-            }
-            else if (newCount < _tasks.Count)
-            {
-                var delta = _tasks.Count - newCount;
-                for (var i = 0; i < delta; ++i)
-                {
-                    var task = _tasks.Dequeue();
-                    _cancellationTokenSources[task].Cancel();
-                    _logger.Log(LogLevel.Debug, "Task{number} canceled", _tasks.Count + 1);
-                }
-            }
-        }
-    }
-
-    private void RunProcessors(int number, Channel<GoodModel> readerChannel, Channel<CalculationResult> writerChannel)
-    {
-        for (var i = 0; i < number; ++i)
-        {
-            var tokenSource = new CancellationTokenSource();
-            var cancellationToken = tokenSource.Token;
-            
-            var task = ProcessData(readerChannel, writerChannel, cancellationToken);
+            var task = _processor.ProcessData(readerChannel, writerChannel, cancellationToken);
             _tasks.Enqueue(task);
-            _cancellationTokenSources[task] = tokenSource;
-            _logger.Log(LogLevel.Debug, "Task{number} created and started", _tasks.Count);
+            _logger.Log(LogLevel.Debug, "Task{number} created and started", i + 1);
         }
     }
 
@@ -130,8 +85,8 @@ public class PriceCalculatorApp
                 "Read lines: {readLines}{newLine}" +
                 "Process lines: {readLines}{newLine}" +
                 "Write lines: {readLines}{newLine}",
-                _numberOfLinesRead, Environment.NewLine, _numberOfCalculations,
-                Environment.NewLine, _numberOfLinesWrite, Environment.NewLine);
+                _reader.GetProcessedLines(), Environment.NewLine, _processor.GetProcessedLines(),
+                Environment.NewLine, _writer.GetProcessedLines(), Environment.NewLine);
 
             await Task.Delay(1000);
         }
@@ -141,85 +96,8 @@ public class PriceCalculatorApp
             "Read lines: {readLines}{newLine}" +
             "Process lines: {readLines}{newLine}" +
             "Write lines: {readLines}{newLine}",
-            Environment.NewLine, _numberOfLinesRead, Environment.NewLine, _numberOfCalculations,
-            Environment.NewLine, _numberOfLinesWrite, Environment.NewLine);
-    }
-
-    private async Task ReadData(string pathToFile, Channel<GoodModel> outputChannel)
-    {
-        await using var fileStream = new FileStream(pathToFile, FileMode.Open, FileAccess.Read);
-        using var streamReader = new StreamReader(fileStream);
-
-        var _ = await streamReader.ReadLineAsync();
-
-        var lineIndex = 0;
-        while (!streamReader.EndOfStream)
-        {
-            var line = await streamReader.ReadLineAsync();
-            var tokens = line?.Split(",",
-                StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-
-            if (tokens == null)
-            {
-                throw new FormatException($"The input file line {lineIndex + 1} cannot be parsed");
-            }
-
-            var model = new GoodModel(
-                long.Parse(tokens[0], CultureInfo.InvariantCulture),
-                int.Parse(tokens[1], CultureInfo.InvariantCulture),
-                int.Parse(tokens[2], CultureInfo.InvariantCulture),
-                int.Parse(tokens[3], CultureInfo.InvariantCulture),
-                int.Parse(tokens[4], CultureInfo.InvariantCulture));
-
-            Interlocked.Increment(ref _numberOfLinesRead);
-            await outputChannel.Writer.WriteAsync(model);
-
-            ++lineIndex;
-        }
-
-        outputChannel.Writer.Complete();
-    }
-
-    private async Task ProcessData(Channel<GoodModel> inputChannel,
-        Channel<CalculationResult> outputChannel,
-        CancellationToken cancellationToken)
-    {
-        var random = new Random();
-        cancellationToken.ThrowIfCancellationRequested();
-        await foreach (var model in inputChannel.Reader.ReadAllAsync())
-        {
-            var calculatorModel = new Domain.Models.PriceCalculator.GoodModel(
-                Height: model.Height,
-                Length: model.Length,
-                Width: model.Width,
-                Weight: model.Weight);
-            decimal price = _priceCalculatorService.CalculatePrice(new[] {calculatorModel});
-            // Имитируем сложность вычислений
-            await Task.Delay(random.Next(150, 500));
-            var result = new CalculationResult(model.Id, price);
-
-            Interlocked.Increment(ref _numberOfCalculations);
-            await outputChannel.Writer.WriteAsync(result);
-
-            cancellationToken.ThrowIfCancellationRequested();
-        }
-    }
-
-    private async Task WriteData(string pathToFile, Channel<CalculationResult> channel)
-    {
-        await using var fileStream = new FileStream(pathToFile, FileMode.Create, FileAccess.Write);
-        await using var streamWriter = new StreamWriter(fileStream);
-
-
-        const string header = "id,delivery_price";
-        await streamWriter.WriteLineAsync(header);
-
-        await foreach (var model in channel.Reader.ReadAllAsync())
-        {
-            var outputLine = $"{model.Id},{model.DeliveryPrice.ToString(CultureInfo.InvariantCulture)}";
-
-            Interlocked.Increment(ref _numberOfLinesWrite);
-            await streamWriter.WriteLineAsync(outputLine);
-        }
+            Environment.NewLine, _reader.GetProcessedLines(), Environment.NewLine,
+            _processor.GetProcessedLines(), Environment.NewLine, _writer.GetProcessedLines(),
+            Environment.NewLine);
     }
 }
