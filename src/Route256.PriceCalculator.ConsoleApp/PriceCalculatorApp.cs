@@ -1,11 +1,9 @@
-﻿using System.Globalization;
-using System.Threading.Channels;
+﻿using System.Threading.Channels;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Route256.PriceCalculator.ConsoleApp.Interfaces;
 using Route256.PriceCalculator.ConsoleApp.Models;
 using Route256.PriceCalculator.ConsoleApp.Options;
-using Route256.PriceCalculator.Domain.Services.Interfaces;
 
 namespace Route256.PriceCalculator.ConsoleApp;
 
@@ -16,10 +14,12 @@ public class PriceCalculatorApp
     private readonly IDataProcessor _processor;
     private readonly IDataWriter _writer;
     private readonly PriceCalculatorAppOptions _options;
+    private readonly Dictionary<Task, CancellationTokenSource> _cancellationTokenSources = new();
     private readonly Queue<Task> _tasks = new();
     private bool _isCompleted;
     private readonly Channel<GoodModel> _readerChannel;
     private readonly Channel<CalculationResult> _writerChannel;
+    private bool _isProcessorsFinishRead;
 
     public PriceCalculatorApp(IOptionsMonitor<PriceCalculatorAppOptions> optionsMonitor,
         ILogger<PriceCalculatorApp> logger, IDataReader reader, IDataProcessor processor, IDataWriter writer)
@@ -30,6 +30,8 @@ public class PriceCalculatorApp
         _processor = processor;
         _writer = writer;
         _options = optionsMonitor.CurrentValue;
+        
+        optionsMonitor.OnChange(options => { ChangeNumberOfProcessors(options.ParallelismDegree); });
 
         _readerChannel = Channel.CreateBounded<GoodModel>(new BoundedChannelOptions(_options.ReaderChannelBound)
         {
@@ -46,34 +48,72 @@ public class PriceCalculatorApp
 
     public async Task Run()
     {
-        var tokenSource = new CancellationTokenSource();
-        var cancellationToken = tokenSource.Token;
-
         var logTask = ReportProgress();
 
-        RunProcessors(_readerChannel, _writerChannel, cancellationToken);
+        RunProcessors(_options.ParallelismDegree, _readerChannel, _writerChannel);
 
-        var taskReadData = _reader.ReadData(_readerChannel);
-        var taskWriteData = _writer.WriteData(_writerChannel);
+        var readDataTask = _reader.ReadData(_readerChannel);
+        var writeDataTask = _writer.WriteData(_writerChannel);
 
-        await taskReadData;
+        await readDataTask;
+
+        await _readerChannel.Reader.Completion;
+        
+        // Чтобы не получилось такой ситуации, что при Task.WhenAll список задач изменяется,
+        // ставим флаг.
+        lock (_tasks)
+        {
+            _isProcessorsFinishRead = true;
+        }
+
         await Task.WhenAll(_tasks);
 
         _writerChannel.Writer.Complete();
-        await taskWriteData;
+        await writeDataTask;
 
         _isCompleted = true;
         await logTask;
+
     }
 
-    private void RunProcessors(Channel<GoodModel> readerChannel, Channel<CalculationResult> writerChannel,
-        CancellationToken cancellationToken)
+    private void ChangeNumberOfProcessors(int newCount)
     {
-        for (var i = 0; i < _options.ParallelismDegree; ++i)
+        lock (_tasks)
         {
+            if (_isProcessorsFinishRead)
+            {
+                return;
+            }
+    
+            if (newCount > _tasks.Count)
+            {
+                var delta = newCount - _tasks.Count;
+                RunProcessors(delta, _readerChannel, _writerChannel);
+            }
+            else if (newCount < _tasks.Count)
+            {
+                var delta = _tasks.Count - newCount;
+                for (var i = 0; i < delta; ++i)
+                {
+                    var task = _tasks.Dequeue();
+                    _cancellationTokenSources[task].Cancel();
+                    _logger.Log(LogLevel.Debug, "Task{number} canceled", _tasks.Count + 1);
+                }
+            }
+        }
+    }
+    
+    private void RunProcessors(int number, Channel<GoodModel> readerChannel, Channel<CalculationResult> writerChannel)
+    {
+        for (var i = 0; i < number; ++i)
+        {
+            var tokenSource = new CancellationTokenSource();
+            var cancellationToken = tokenSource.Token;
+            
             var task = _processor.ProcessData(readerChannel, writerChannel, cancellationToken);
             _tasks.Enqueue(task);
-            _logger.Log(LogLevel.Debug, "Task{number} created and started", i + 1);
+            _cancellationTokenSources[task] = tokenSource;
+            _logger.Log(LogLevel.Debug, "Task{number} created and started", _tasks.Count);
         }
     }
 

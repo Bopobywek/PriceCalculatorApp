@@ -25,7 +25,7 @@ public class Processor : IDataProcessor
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        await foreach (var model in inputChannel.Reader.ReadAllAsync(cancellationToken))
+        await foreach (var model in inputChannel.Reader.ReadAllAsync())
         {
             var calculatorModel = new Domain.Models.PriceCalculator.GoodModel(
                 Height: model.Height,
@@ -36,7 +36,7 @@ public class Processor : IDataProcessor
             var result = new CalculationResult(model.Id, price);
 
             Interlocked.Increment(ref _numberOfCalculations);
-            await outputChannel.Writer.WriteAsync(result, cancellationToken);
+            await outputChannel.Writer.WriteAsync(result);
 
             cancellationToken.ThrowIfCancellationRequested();
         }
